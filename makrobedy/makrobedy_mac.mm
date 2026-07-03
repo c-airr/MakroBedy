@@ -136,7 +136,7 @@ static CGEventRef eventCallback(CGEventTapProxy, CGEventType type, CGEventRef ev
     [fill setFill];
     [path fill];
 
-    [[NSGraphicsContext currentContext] setShadow:nil, 0, NO];
+    [[NSGraphicsContext currentContext] setShadow:nil];
 
     [border setStroke];
     path.lineWidth = 1.0;
