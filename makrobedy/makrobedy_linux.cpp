@@ -85,7 +85,9 @@ static void x11InputThread() {
 
     int xtestEvent = 0;
     int xtestError = 0;
-    if (!XTestQueryExtension(dpy, &xtestEvent, &xtestError)) {
+    int xtestMajor = 0;
+    int xtestMinor = 0;
+    if (!XTestQueryExtension(dpy, &xtestEvent, &xtestError, &xtestMajor, &xtestMinor)) {
         g_idle_add(showInfoMessage, const_cast<char*>("Brak rozszerzenia XTest. Makro niedostepne."));
         XCloseDisplay(dpy);
         return;
@@ -196,7 +198,7 @@ static gboolean onToggleDraw(GtkWidget* widget, cairo_t* cr, gpointer) {
     cairo_set_line_width(cr, 1.0);
     cairo_stroke(cr);
 
-    cairo_rectangle(btn.x + radius * 0.5, btn.y + 6, btn.width - radius, 1.0);
+    cairo_rectangle(cr, btn.x + radius * 0.5, btn.y + 6, btn.width - radius, 1.0);
     cairoSetColor(cr, highlight, macroEnabled ? 0.55 : 0.35);
     cairo_fill(cr);
 
