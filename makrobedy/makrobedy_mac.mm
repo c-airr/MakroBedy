@@ -13,15 +13,23 @@ static const int LEFT_CPS = 15;
 static const int RIGHT_CPS = 22;
 
 static NSColor* colorBg() {
-    return [NSColor colorWithRed:42.0/255 green:42.0/255 blue:42.0/255 alpha:1.0];
+    return [NSColor colorWithRed:24.0/255 green:24.0/255 blue:27.0/255 alpha:1.0];
 }
 
 static NSColor* colorOn() {
-    return [NSColor colorWithRed:34.0/255 green:197.0/255 blue:94.0/255 alpha:1.0];
+    return [NSColor colorWithRed:21.0/255 green:128.0/255 blue:61.0/255 alpha:1.0];
 }
 
 static NSColor* colorOff() {
-    return [NSColor colorWithRed:96.0/255 green:96.0/255 blue:96.0/255 alpha:1.0];
+    return [NSColor colorWithRed:39.0/255 green:39.0/255 blue:42.0/255 alpha:1.0];
+}
+
+static NSColor* colorBorderOn() {
+    return [NSColor colorWithRed:34.0/255 green:150.0/255 blue:72.0/255 alpha:1.0];
+}
+
+static NSColor* colorBorderOff() {
+    return [NSColor colorWithRed:63.0/255 green:63.0/255 blue:70.0/255 alpha:1.0];
 }
 
 static NSRect buttonRectForBounds(NSRect bounds) {
@@ -113,16 +121,38 @@ static CGEventRef eventCallback(CGEventTapProxy, CGEventType type, CGEventRef ev
     NSRectFill(self.bounds);
 
     NSRect btn = buttonRectForBounds(self.bounds);
-    NSColor* fill = macroEnabled ? colorOn() : colorOff();
-    [fill setFill];
+    CGFloat radius = btn.size.width / 5.0;
 
-    CGFloat radius = btn.size.width / 6.0;
+    NSShadow* shadow = [[NSShadow alloc] init];
+    shadow.shadowBlurRadius = 16.0;
+    shadow.shadowOffset = NSMakeSize(0, -4);
+    shadow.shadowColor = [NSColor colorWithRed:9.0/255 green:9.0/255 blue:11.0/255 alpha:0.85];
+    [shadow set];
+
+    NSColor* fill = macroEnabled ? colorOn() : colorOff();
+    NSColor* border = macroEnabled ? colorBorderOn() : colorBorderOff();
     NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:btn xRadius:radius yRadius:radius];
+
+    [fill setFill];
     [path fill];
 
-    [[NSColor colorWithRed:30.0/255 green:30.0/255 blue:30.0/255 alpha:1.0] setStroke];
-    path.lineWidth = 3.0;
+    [[NSGraphicsContext currentContext] setShadow:nil, 0, NO];
+
+    [border setStroke];
+    path.lineWidth = 1.0;
     [path stroke];
+
+    NSColor* highlight = macroEnabled
+        ? [NSColor colorWithRed:40.0/255 green:170.0/255 blue:88.0/255 alpha:0.55]
+        : [NSColor colorWithRed:72.0/255 green:72.0/255 blue:78.0/255 alpha:0.35];
+    NSRect highlightRect = NSMakeRect(
+        btn.origin.x + radius * 0.5,
+        NSMaxY(btn) - radius * 0.55,
+        btn.size.width - radius,
+        1.0
+    );
+    [highlight setFill];
+    NSRectFill(highlightRect);
 }
 
 - (void)mouseDown:(NSEvent*)event {
@@ -221,7 +251,7 @@ int main(int argc, const char* argv[]) {
 
         NSImage* icon = [[NSImage alloc] initWithSize:NSMakeSize(32, 32)];
         [icon lockFocus];
-        [[NSColor colorWithRed:70.0/255 green:70.0/255 blue:70.0/255 alpha:1.0] setFill];
+        [[NSColor colorWithRed:24.0/255 green:24.0/255 blue:27.0/255 alpha:1.0] setFill];
         NSRectFill(NSMakeRect(0, 0, 32, 32));
         [colorOn() setFill];
         [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(7, 7, 18, 18)] fill];

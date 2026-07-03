@@ -10,10 +10,14 @@
 constexpr int LEFT_CPS = 15;
 constexpr int RIGHT_CPS = 22;
 
-constexpr COLORREF COLOR_BG = RGB(42, 42, 42);
-constexpr COLORREF COLOR_ON = RGB(34, 197, 94);
-constexpr COLORREF COLOR_OFF = RGB(96, 96, 96);
-constexpr COLORREF COLOR_RING = RGB(30, 30, 30);
+constexpr COLORREF COLOR_BG = RGB(24, 24, 27);
+constexpr COLORREF COLOR_ON = RGB(21, 128, 61);
+constexpr COLORREF COLOR_OFF = RGB(39, 39, 42);
+constexpr COLORREF COLOR_BORDER_ON = RGB(34, 150, 72);
+constexpr COLORREF COLOR_BORDER_OFF = RGB(63, 63, 70);
+constexpr COLORREF COLOR_SHADOW = RGB(9, 9, 11);
+constexpr COLORREF COLOR_HIGHLIGHT_ON = RGB(40, 170, 88);
+constexpr COLORREF COLOR_HIGHLIGHT_OFF = RGB(72, 72, 78);
 
 std::atomic<bool> macroEnabled(true);
 std::atomic<bool> leftClickActive(false);
@@ -83,7 +87,7 @@ HICON CreateAppIcon() {
     HBITMAP hbmMask = CreateBitmap(sz, sz, 1, 1, nullptr);
     SelectObject(hdcMem, hbmColor);
 
-    HBRUSH bg = CreateSolidBrush(RGB(70, 70, 70));
+    HBRUSH bg = CreateSolidBrush(COLOR_BG);
     RECT r = { 0, 0, sz, sz };
     FillRect(hdcMem, &r, bg);
     DeleteObject(bg);
@@ -118,26 +122,53 @@ RECT GetButtonRect(const RECT& client) {
     return btnRc;
 }
 
+void FillRoundRect(HDC hdc, const RECT& rc, int radius, COLORREF fill) {
+    HBRUSH brush = CreateSolidBrush(fill);
+    HPEN pen = static_cast<HPEN>(GetStockObject(NULL_PEN));
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    DeleteObject(brush);
+}
+
+void StrokeRoundRect(HDC hdc, const RECT& rc, int radius, COLORREF color, int width = 1) {
+    HPEN pen = CreatePen(PS_SOLID, width, color);
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(HOLLOW_BRUSH));
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, radius, radius);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    DeleteObject(pen);
+}
+
 void PaintWindow(HDC hdc, const RECT& client) {
     HBRUSH bg = CreateSolidBrush(COLOR_BG);
     FillRect(hdc, &client, bg);
     DeleteObject(bg);
 
     const RECT btnRc = GetButtonRect(client);
+    const int radius = (btnRc.right - btnRc.left) / 5;
+
+    RECT shadow = btnRc;
+    OffsetRect(&shadow, 0, 5);
+    FillRoundRect(hdc, shadow, radius, COLOR_SHADOW);
+
     const COLORREF fill = macroEnabled ? COLOR_ON : COLOR_OFF;
+    const COLORREF border = macroEnabled ? COLOR_BORDER_ON : COLOR_BORDER_OFF;
+    FillRoundRect(hdc, btnRc, radius, fill);
+    StrokeRoundRect(hdc, btnRc, radius, border, 1);
 
-    HBRUSH brush = CreateSolidBrush(fill);
-    HPEN ring = CreatePen(PS_SOLID, 3, COLOR_RING);
-    HGDIOBJ oldPen = SelectObject(hdc, ring);
-    HGDIOBJ oldBrush = SelectObject(hdc, brush);
-
-    const int radius = (btnRc.right - btnRc.left) / 6;
-    RoundRect(hdc, btnRc.left, btnRc.top, btnRc.right, btnRc.bottom, radius, radius);
-
-    SelectObject(hdc, oldBrush);
-    SelectObject(hdc, oldPen);
-    DeleteObject(brush);
-    DeleteObject(ring);
+    const COLORREF highlight = macroEnabled ? COLOR_HIGHLIGHT_ON : COLOR_HIGHLIGHT_OFF;
+    RECT highlightRc = btnRc;
+    highlightRc.left += radius / 2;
+    highlightRc.right -= radius / 2;
+    highlightRc.top += 6;
+    highlightRc.bottom = highlightRc.top + 1;
+    HBRUSH hiBrush = CreateSolidBrush(highlight);
+    FillRect(hdc, &highlightRc, hiBrush);
+    DeleteObject(hiBrush);
 }
 
 bool HitButton(HWND hwnd, int x, int y) {
