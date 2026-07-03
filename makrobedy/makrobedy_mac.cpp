@@ -2,13 +2,22 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <ApplicationServices/ApplicationServices.h>
 
 std::atomic<bool> leftClickActive(false);
 std::atomic<bool> rightClickActive(false);
+std::atomic<bool> running(true);
+
+static CFMachPortRef g_eventTap = nullptr;
 
 int leftCPS = 15;
 int rightCPS = 22;
+
+void signalHandler(int) {
+    running = false;
+    CFRunLoopStop(CFRunLoopGetCurrent());
+}
 
 void clickMouse(int button) {
     CGEventRef locEvent = CGEventCreate(NULL);
@@ -51,7 +60,20 @@ void clickRightThread() {
     std::cout << "[KLIK] Prawy przycisk - STOP\n";
 }
 
-CGEventRef eventCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void* refcon) {
+void tapWatchdog(CFRunLoopTimerRef, void*) {
+    if (g_eventTap && !CGEventTapIsEnabled(g_eventTap)) {
+        CGEventTapEnable(g_eventTap, true);
+    }
+}
+
+CGEventRef eventCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void*) {
+    if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+        if (g_eventTap) {
+            CGEventTapEnable(g_eventTap, true);
+        }
+        return event;
+    }
+
     if (type == kCGEventOtherMouseDown) {
         int button = (int)CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
         if (button == 3 && !rightClickActive) {
@@ -68,27 +90,25 @@ CGEventRef eventCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef eve
         } else if (button == 4) {
             leftClickActive = false;
         }
-    } else if (type == kCGEventKeyDown) {
-        if (CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == 53) {
-            CFRunLoopStop(CFRunLoopGetCurrent());
-        }
     }
 
     return event;
 }
 
 int main() {
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+
     std::cout << "================================================\n";
     std::cout << "  KLIKER - HIGH PRECISION TIMING (macOS)\n";
     std::cout << "================================================\n\n";
     std::cout << "[INFO] LEFT CPS: " << leftCPS << ", RIGHT CPS: " << rightCPS << "\n";
 
     CGEventMask mask = CGEventMaskBit(kCGEventOtherMouseDown) |
-                       CGEventMaskBit(kCGEventOtherMouseUp) |
-                       CGEventMaskBit(kCGEventKeyDown);
+                       CGEventMaskBit(kCGEventOtherMouseUp);
 
-    CFMachPortRef eventTap = CGEventTapCreate(
-        kCGSessionEventTap,
+    g_eventTap = CGEventTapCreate(
+        kCGHIDEventTap,
         kCGHeadInsertEventTap,
         kCGEventTapOptionDefault,
         mask,
@@ -96,27 +116,43 @@ int main() {
         NULL
     );
 
-    if (!eventTap) {
+    if (!g_eventTap) {
         std::cerr << "[BLAD] Nie mozna utworzyc event tap!\n";
         std::cerr << "[BLAD] Nadaj uprawnienia: Ustawienia -> Prywatnosc -> Dostepnosc\n";
         return 1;
     }
 
-    CFRunLoopSourceRef runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0);
+    CFRunLoopSourceRef runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, g_eventTap, 0);
     CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopCommonModes);
-    CGEventTapEnable(eventTap, true);
+    CGEventTapEnable(g_eventTap, true);
+
+    CFRunLoopTimerRef watchdog = CFRunLoopTimerCreate(
+        kCFAllocatorDefault,
+        CFAbsoluteTimeGetCurrent() + 1.0,
+        1.0,
+        0,
+        0,
+        tapWatchdog,
+        NULL
+    );
+    CFRunLoopAddTimer(CFRunLoopGetCurrent(), watchdog, kCFRunLoopCommonModes);
 
     std::cout << "\n========== MAKRO WLACZONE ==========\n";
     std::cout << "Boczny przycisk LEWY (button 4)  -> RIGHT CLICK (" << rightCPS << " CPS)\n";
     std::cout << "Boczny przycisk PRAWY (button 5) -> LEFT CLICK  (" << leftCPS << " CPS)\n";
-    std::cout << "ESC -> wyjscie\n";
+    std::cout << "Ctrl+C w terminalu -> wyjscie\n";
     std::cout << "===================================\n\n";
 
     CFRunLoopRun();
 
-    CGEventTapEnable(eventTap, false);
+    leftClickActive = false;
+    rightClickActive = false;
+
+    CGEventTapEnable(g_eventTap, false);
+    CFRelease(watchdog);
     CFRelease(runLoopSource);
-    CFRelease(eventTap);
+    CFRelease(g_eventTap);
+    g_eventTap = nullptr;
 
     std::cout << "\n[INFO] Zamknieto makro\n";
     return 0;
