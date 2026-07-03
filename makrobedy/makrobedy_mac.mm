@@ -12,12 +12,23 @@ static CFMachPortRef g_eventTap = nullptr;
 static const int LEFT_CPS = 15;
 static const int RIGHT_CPS = 22;
 
+static NSColor* colorBg() {
+    return [NSColor colorWithRed:42.0/255 green:42.0/255 blue:42.0/255 alpha:1.0];
+}
+
 static NSColor* colorOn() {
     return [NSColor colorWithRed:34.0/255 green:197.0/255 blue:94.0/255 alpha:1.0];
 }
 
 static NSColor* colorOff() {
     return [NSColor colorWithRed:96.0/255 green:96.0/255 blue:96.0/255 alpha:1.0];
+}
+
+static NSRect buttonRectForBounds(NSRect bounds) {
+    CGFloat side = MIN(bounds.size.width, bounds.size.height) * 0.55;
+    CGFloat x = (bounds.size.width - side) / 2.0;
+    CGFloat y = (bounds.size.height - side) / 2.0;
+    return NSMakeRect(x, y, side, side);
 }
 
 static void clickMouse(int button) {
@@ -98,23 +109,36 @@ static CGEventRef eventCallback(CGEventTapProxy, CGEventType type, CGEventRef ev
 @implementation ToggleView
 
 - (void)drawRect:(NSRect)dirtyRect {
+    [colorBg() setFill];
+    NSRectFill(self.bounds);
+
+    NSRect btn = buttonRectForBounds(self.bounds);
     NSColor* fill = macroEnabled ? colorOn() : colorOff();
     [fill setFill];
-    NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, 6, 6) xRadius:14 yRadius:14];
+
+    CGFloat radius = btn.size.width / 6.0;
+    NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:btn xRadius:radius yRadius:radius];
     [path fill];
 
-    [[NSColor colorWithRed:55.0/255 green:55.0/255 blue:55.0/255 alpha:1.0] setStroke];
-    path.lineWidth = 2.0;
+    [[NSColor colorWithRed:30.0/255 green:30.0/255 blue:30.0/255 alpha:1.0] setStroke];
+    path.lineWidth = 3.0;
     [path stroke];
 }
 
 - (void)mouseDown:(NSEvent*)event {
-    macroEnabled = !macroEnabled;
-    if (!macroEnabled) {
-        leftClickActive = false;
-        rightClickActive = false;
+    NSPoint pt = [self convertPoint:event.locationInWindow fromView:nil];
+    if (NSPointInRect(pt, buttonRectForBounds(self.bounds))) {
+        macroEnabled = !macroEnabled;
+        if (!macroEnabled) {
+            leftClickActive = false;
+            rightClickActive = false;
+        }
+        [self setNeedsDisplay:YES];
     }
-    [self setNeedsDisplay:YES];
+}
+
+- (void)resetCursorRects {
+    [self addCursorRect:buttonRectForBounds(self.bounds) cursor:[NSCursor pointingHandCursor]];
 }
 
 @end
@@ -153,10 +177,18 @@ static bool setupEventTap() {
     return true;
 }
 
+static CGFloat windowClientSize() {
+    CGFloat screenW = [NSScreen mainScreen].frame.size.width;
+    CGFloat size = screenW * 3.0 / 10.0;
+    if (size < 216) size = 216;
+    if (size > 330) size = 330;
+    return size;
+}
+
 int main(int argc, const char* argv[]) {
     @autoreleasepool {
         [NSApplication sharedApplication];
-        [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
         if (!setupEventTap()) {
             NSAlert* alert = [[NSAlert alloc] init];
@@ -166,28 +198,25 @@ int main(int argc, const char* argv[]) {
             return 1;
         }
 
+        CGFloat size = windowClientSize();
         NSScreen* screen = [NSScreen mainScreen];
-        CGFloat screenW = screen.frame.size.width;
-        CGFloat size = screenW / 10.0;
-        if (size < 72) size = 72;
-        if (size > 110) size = 110;
-
-        CGFloat x = screen.frame.origin.x + screen.frame.size.width - size - 24;
-        CGFloat y = screen.frame.origin.y + screen.frame.size.height - size - 24;
+        NSRect screenFrame = screen.visibleFrame;
+        CGFloat x = screenFrame.origin.x + (screenFrame.size.width - size) / 2.0;
+        CGFloat y = screenFrame.origin.y + (screenFrame.size.height - size) / 2.0;
 
         NSWindow* window = [[NSWindow alloc] initWithContentRect:NSMakeRect(x, y, size, size)
-                                                       styleMask:NSWindowStyleMaskBorderless
+                                                       styleMask:NSWindowStyleMaskTitled |
+                                                                 NSWindowStyleMaskClosable |
+                                                                 NSWindowStyleMaskMiniaturizable
                                                          backing:NSBackingStoreBuffered
                                                            defer:NO];
-        [window setLevel:NSFloatingWindowLevel];
-        [window setOpaque:YES];
-        [window setBackgroundColor:[NSColor clearColor]];
-        [window setHasShadow:YES];
-        [window setMovableByWindowBackground:YES];
-        [window setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary];
+        [window setTitle:@"MakroBedy"];
+        [window setBackgroundColor:colorBg()];
+        [window setMovableByWindowBackground:NO];
 
         ToggleView* view = [[ToggleView alloc] initWithFrame:NSMakeRect(0, 0, size, size)];
         [window setContentView:view];
+        [window center];
         [window makeKeyAndOrderFront:nil];
 
         NSImage* icon = [[NSImage alloc] initWithSize:NSMakeSize(32, 32)];

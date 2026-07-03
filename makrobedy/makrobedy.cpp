@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <windowsx.h>
 #include <thread>
 #include <atomic>
 #include <chrono>
@@ -9,9 +10,10 @@
 constexpr int LEFT_CPS = 15;
 constexpr int RIGHT_CPS = 22;
 
+constexpr COLORREF COLOR_BG = RGB(42, 42, 42);
 constexpr COLORREF COLOR_ON = RGB(34, 197, 94);
 constexpr COLORREF COLOR_OFF = RGB(96, 96, 96);
-constexpr COLORREF COLOR_RING = RGB(55, 55, 55);
+constexpr COLORREF COLOR_RING = RGB(30, 30, 30);
 
 std::atomic<bool> macroEnabled(true);
 std::atomic<bool> leftClickActive(false);
@@ -106,22 +108,53 @@ HICON CreateAppIcon() {
     return icon;
 }
 
-void PaintToggle(HDC hdc, const RECT& rc) {
+RECT GetButtonRect(const RECT& client) {
+    const int w = client.right - client.left;
+    const int h = client.bottom - client.top;
+    const int btn = (w < h ? w : h) * 55 / 100;
+    const int cx = (w - btn) / 2;
+    const int cy = (h - btn) / 2;
+    RECT btnRc = { cx, cy, cx + btn, cy + btn };
+    return btnRc;
+}
+
+void PaintWindow(HDC hdc, const RECT& client) {
+    HBRUSH bg = CreateSolidBrush(COLOR_BG);
+    FillRect(hdc, &client, bg);
+    DeleteObject(bg);
+
+    const RECT btnRc = GetButtonRect(client);
     const COLORREF fill = macroEnabled ? COLOR_ON : COLOR_OFF;
+
     HBRUSH brush = CreateSolidBrush(fill);
-    FillRect(hdc, &rc, brush);
-    DeleteObject(brush);
-
-    HPEN ring = CreatePen(PS_SOLID, 2, COLOR_RING);
+    HPEN ring = CreatePen(PS_SOLID, 3, COLOR_RING);
     HGDIOBJ oldPen = SelectObject(hdc, ring);
-    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(HOLLOW_BRUSH));
+    HGDIOBJ oldBrush = SelectObject(hdc, brush);
 
-    const int pad = 6;
-    RoundRect(hdc, pad, pad, rc.right - pad, rc.bottom - pad, 14, 14);
+    const int radius = (btnRc.right - btnRc.left) / 6;
+    RoundRect(hdc, btnRc.left, btnRc.top, btnRc.right, btnRc.bottom, radius, radius);
 
     SelectObject(hdc, oldBrush);
     SelectObject(hdc, oldPen);
+    DeleteObject(brush);
     DeleteObject(ring);
+}
+
+bool HitButton(HWND hwnd, int x, int y) {
+    RECT client;
+    GetClientRect(hwnd, &client);
+    const RECT btnRc = GetButtonRect(client);
+    POINT pt = { x, y };
+    return PtInRect(&btnRc, pt) != 0;
+}
+
+void ToggleMacro(HWND hwnd) {
+    macroEnabled = !macroEnabled;
+    if (!macroEnabled) {
+        leftClickActive = false;
+        rightClickActive = false;
+    }
+    InvalidateRect(hwnd, nullptr, FALSE);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -133,30 +166,38 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-        RECT rc;
-        GetClientRect(hwnd, &rc);
-        PaintToggle(hdc, rc);
+        RECT client;
+        GetClientRect(hwnd, &client);
+        PaintWindow(hdc, client);
         EndPaint(hwnd, &ps);
         return 0;
     }
 
     case WM_LBUTTONDOWN:
-        macroEnabled = !macroEnabled;
-        if (!macroEnabled) {
-            leftClickActive = false;
-            rightClickActive = false;
+        if (HitButton(hwnd, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam))) {
+            ToggleMacro(hwnd);
         }
-        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
 
-    case WM_NCHITTEST:
-        return HTCAPTION;
-
-    case WM_ERASEBKGND:
-        return 1;
+    case WM_SETCURSOR:
+        if (LOWORD(lParam) == HTCLIENT) {
+            POINT pt;
+            GetCursorPos(&pt);
+            ScreenToClient(hwnd, &pt);
+            SetCursor(LoadCursor(nullptr, HitButton(hwnd, pt.x, pt.y) ? IDC_HAND : IDC_ARROW));
+            return TRUE;
+        }
+        break;
     }
 
     return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+int GetWindowClientSize() {
+    int size = GetSystemMetrics(SM_CXSCREEN) * 3 / 10;
+    if (size < 216) size = 216;
+    if (size > 330) size = 330;
+    return size;
 }
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
@@ -176,31 +217,34 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int nShow) {
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
-    wc.hCursor = LoadCursor(nullptr, IDC_HAND);
-    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(GRAY_BRUSH));
-    wc.lpszClassName = L"MakroBedyToggle";
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hbrBackground = CreateSolidBrush(COLOR_BG);
+    wc.lpszClassName = L"MakroBedyWindow";
     wc.hIcon = appIcon;
     wc.hIconSm = appIcon;
     RegisterClassExW(&wc);
 
-    int size = GetSystemMetrics(SM_CXSCREEN) / 10;
-    if (size < 72) size = 72;
-    if (size > 110) size = 110;
+    const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    const int clientSize = GetWindowClientSize();
 
-    const int x = GetSystemMetrics(SM_CXSCREEN) - size - 24;
-    const int y = 24;
+    RECT wr = { 0, 0, clientSize, clientSize };
+    AdjustWindowRect(&wr, style, FALSE);
+
+    const int winW = wr.right - wr.left;
+    const int winH = wr.bottom - wr.top;
+    const int screenW = GetSystemMetrics(SM_CXSCREEN);
+    const int screenH = GetSystemMetrics(SM_CYSCREEN);
+    const int x = (screenW - winW) / 2;
+    const int y = (screenH - winH) / 2;
 
     g_hwnd = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-        L"MakroBedyToggle",
-        L"",
-        WS_POPUP,
-        x, y, size, size,
+        0,
+        L"MakroBedyWindow",
+        L"MakroBedy",
+        style,
+        x, y, winW, winH,
         nullptr, nullptr, hInst, nullptr
     );
-
-    HRGN rgn = CreateRoundRectRgn(0, 0, size + 1, size + 1, 18, 18);
-    SetWindowRgn(g_hwnd, rgn, TRUE);
 
     ShowWindow(g_hwnd, nShow);
     UpdateWindow(g_hwnd);
