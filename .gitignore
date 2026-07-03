@@ -20,3 +20,8 @@ Release/
 *.ipch
 *.recipe
 *.Build.CppClean.log
+
+# Linux/mac binaries
+makrobedy_linux
+makrobedy_linux_*
+makrobedy_mac
