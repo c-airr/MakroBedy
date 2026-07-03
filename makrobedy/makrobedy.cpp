@@ -9,9 +9,9 @@
 std::atomic<bool> leftClickActive(false);
 std::atomic<bool> rightClickActive(false);
 
-// Ustawione zgodnie z Twoim øyczeniem
+// Ustawione zgodnie z Twoim ùyczeniem
 int leftCPS = 15;
-int rightCPS = 20;
+int rightCPS = 22;
 
 void clickMouse(int button) {
     INPUT input = {};
