@@ -20,7 +20,7 @@ done
 
 g++ -std=c++17 -O2 -o makrobedy_linux makrobedy/makrobedy_linux.cpp \
     $(pkg-config --cflags gtk+-3.0) \
-    $(pkg-config --libs gtk+-3.0) -lXtst -lpthread
+    $(pkg-config --libs gtk+-3.0 x11) -lXtst -lpthread
 
 echo "Gotowe: ./makrobedy_linux"
 echo "Uwaga: makro dziala tylko na sesji X11, nie na Waylandzie."
