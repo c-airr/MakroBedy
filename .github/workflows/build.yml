@@ -67,7 +67,8 @@ jobs:
           - platform: ARM64
             arch: arm64
 
-    runs-on: windows-latest
+    # VS2022 (toolset v143) - obraz windows-latest (VS2026) nie ma juz v143 dla ARM64
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
